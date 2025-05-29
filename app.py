@@ -224,8 +224,8 @@ def editar_factura(id):
         for i in range(1, 6):
             producto_id = request.form.get(f'producto_id_{i}')
             cantidad = request.form.get(f'cantidad_{i}')
-            if producto_id and cantidad:
-                cur.execute('SELECT * FROM obtener_precio_producto(%s);', (producto_id,))
+            if producto_id and cantidad and float(cantidad) > 0:
+                cur.execute('SELECT precio FROM productos WHERE id = %s;', (producto_id,))
                 precio = cur.fetchone()[0]
                 subtotal = float(precio) * float(cantidad)
                 items.append({
@@ -241,7 +241,7 @@ def editar_factura(id):
 
         for item in items:
             cur.execute(
-                'CALL insertar_factura_item(%s, %s, %s, %s, %s);',
+                'INSERT INTO factura_items (factura_id, producto_id, cantidad, precio, subtotal) VALUES (%s, %s, %s, %s, %s);',
                 (id, item['producto_id'], item['cantidad'], item['precio'], item['subtotal'])
             )
 
@@ -253,16 +253,23 @@ def editar_factura(id):
         return redirect(url_for('ver_factura', id=id))
 
     # Método GET: mostrar formulario con datos actuales
-    cur.execute('SELECT * FROM obtener_factura_por_id(%s);', (id,))
+    cur.execute('SELECT id, cliente_id, total, numero FROM facturas WHERE id = %s;', (id,))
     factura = cur.fetchone()
 
-    cur.execute('SELECT * FROM obtener_items_factura(%s);', (id,))
+    cur.execute('''
+        SELECT fi.id, fi.factura_id, p.id as producto_id, p.nombre as producto_nombre, 
+               fi.cantidad, fi.precio, fi.subtotal
+        FROM factura_items fi
+        JOIN productos p ON fi.producto_id = p.id
+        WHERE fi.factura_id = %s
+        ORDER BY fi.id;
+    ''', (id,))
     items = cur.fetchall()
 
-    cur.execute('SELECT * FROM obtener_clientes();')
+    cur.execute('SELECT id, nombre FROM clientes ORDER BY nombre;')
     clientes = cur.fetchall()
 
-    cur.execute('SELECT * FROM obtener_productos();')
+    cur.execute('SELECT id, nombre, precio FROM productos ORDER BY nombre;')
     productos = cur.fetchall()
 
     # Preparar los productos y cantidades seleccionadas para el formulario
@@ -272,7 +279,7 @@ def editar_factura(id):
     for idx in range(5):
         if idx < len(items):
             productos_seleccionados[f'producto_id_{idx+1}'] = items[idx][2]  # producto_id
-            cantidades_seleccionadas[f'cantidad_{idx+1}'] = items[idx][3]    # cantidad
+            cantidades_seleccionadas[f'cantidad_{idx+1}'] = items[idx][4]    # cantidad
         else:
             productos_seleccionados[f'producto_id_{idx+1}'] = ''
             cantidades_seleccionadas[f'cantidad_{idx+1}'] = ''
